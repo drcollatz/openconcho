@@ -1,7 +1,6 @@
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { motion, type Variants } from "framer-motion";
 import { ChevronRight, CircleDot, Clock, MessageSquare } from "lucide-react";
-import { useState } from "react";
 import { useSessions } from "@/api/queries";
 import type { components } from "@/api/schema.d.ts";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
@@ -31,11 +30,22 @@ const item: Variants = {
 	show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 280, damping: 24 } },
 };
 
+export type SessionsSearch = { page: number; sort: SortDir };
+
+// Page and direction live in the URL. Component state would reset when the user
+// opens a session and comes back, because the list unmounts in between.
+export function validateSessionsSearch(search: Record<string, unknown>): SessionsSearch {
+	const page = Number(search.page);
+	return {
+		page: Number.isInteger(page) && page >= 1 ? page : 1,
+		sort: search.sort === "asc" ? "asc" : "desc",
+	};
+}
+
 export function SessionList() {
 	const { mask } = useDemo();
 	const { workspaceId } = useParams({ strict: false }) as { workspaceId: string };
-	const [page, setPage] = useState(1);
-	const [sortDir, setSortDir] = useState<SortDir>("desc");
+	const { page, sort: sortDir } = useSearch({ from: "/workspaces_/$workspaceId_/sessions" });
 	const navigate = useNavigate();
 	const { data, isLoading, error } = useSessions(workspaceId, page, PAGE_SIZE, sortDir === "desc");
 
@@ -43,10 +53,19 @@ export function SessionList() {
 	const totalPages = (data as { pages?: number } | undefined)?.pages ?? 1;
 	const total = (data as { total?: number } | undefined)?.total ?? 0;
 
+	// replace keeps Back from stepping through pages; it returns to the list as last shown.
+	function updateSearch(changes: Partial<SessionsSearch>) {
+		navigate({
+			to: "/workspaces/$workspaceId/sessions" as never,
+			params: { workspaceId } as never,
+			search: { page, sort: sortDir, ...changes } as never,
+			replace: true,
+		});
+	}
+
 	// Ordering happens on the server (see useSessions), so the rows are shown as received.
 	function handleSort(_field: string, dir: SortDir) {
-		setSortDir(dir);
-		setPage(1);
+		updateSearch({ sort: dir, page: 1 });
 	}
 
 	return (
@@ -176,7 +195,11 @@ export function SessionList() {
 							</motion.button>
 						))}
 					</motion.div>
-					<Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+					<Pagination
+						page={page}
+						totalPages={totalPages}
+						onPageChange={(next) => updateSearch({ page: next })}
+					/>
 				</>
 			)}
 		</div>

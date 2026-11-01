@@ -73,18 +73,16 @@ function sessionListRequests(): URLSearchParams[] {
 		.map((url) => url.searchParams);
 }
 
-function renderSessions() {
+function renderSessions(initialPath = `/workspaces/${WORKSPACE_ID}/sessions`) {
 	saveStore({ instances: [INSTANCE], activeId: INSTANCE.id });
 	const router = createRouter({
 		routeTree,
-		history: createMemoryHistory({
-			initialEntries: [`/workspaces/${WORKSPACE_ID}/sessions`],
-		}),
+		history: createMemoryHistory({ initialEntries: [initialPath] }),
 	});
 	const qc = new QueryClient({
 		defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
 	});
-	return render(
+	const view = render(
 		<QueryClientProvider client={qc}>
 			<DemoProvider>
 				<MetadataProvider>
@@ -94,6 +92,7 @@ function renderSessions() {
 			</DemoProvider>
 		</QueryClientProvider>,
 	);
+	return { ...view, router };
 }
 
 async function renderedSessionIds(): Promise<string[]> {
@@ -137,5 +136,25 @@ describe("sessions list global ordering", () => {
 		const params = sessionListRequests();
 		expect(params.at(-1)?.get("reverse")).toBe("false");
 		expect(params.at(-1)?.get("page")).toBe("1");
+	});
+
+	it("keeps direction and page when a session is opened and Back is pressed", async () => {
+		mockHoncho();
+		const { router } = renderSessions(`/workspaces/${WORKSPACE_ID}/sessions?sort=asc&page=2`);
+		expect((await renderedSessionIds())[0]).toBe("sess-20");
+
+		await router.navigate({
+			to: "/workspaces/$workspaceId/sessions/$sessionId",
+			params: { workspaceId: WORKSPACE_ID, sessionId: "sess-20" },
+		});
+		await router.history.back();
+
+		await waitFor(() => {
+			expect((router.state.location.search as Record<string, unknown>).sort).toBe("asc");
+			expect(screen.getAllByRole("button", { name: /^sess-\d+/ })[0]).toHaveTextContent("sess-20");
+		});
+		const params = sessionListRequests();
+		expect(params.at(-1)?.get("reverse")).toBe("false");
+		expect(params.at(-1)?.get("page")).toBe("2");
 	});
 });
