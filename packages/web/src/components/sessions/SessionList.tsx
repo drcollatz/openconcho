@@ -1,7 +1,7 @@
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { motion, type Variants } from "framer-motion";
 import { ChevronRight, CircleDot, Clock, MessageSquare } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useSessions } from "@/api/queries";
 import type { components } from "@/api/schema.d.ts";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
@@ -16,11 +16,11 @@ import { COLOR } from "@/lib/constants";
 
 type Session = components["schemas"]["Session"];
 
-const SORT_OPTIONS = [
-	{ value: "created_at", label: "Newest" },
-	{ value: "active", label: "Active" },
-	{ value: "id", label: "ID" },
-];
+// Only creation time has a server-side order. Active and ID sorts applied to the
+// loaded page only, which hid the workspace-wide extremes, so they are gone.
+const SORT_FIELD = "created_at";
+const SORT_OPTIONS = [{ value: SORT_FIELD, label: "Newest" }];
+const PAGE_SIZE = 20;
 
 const container: Variants = {
 	hidden: { opacity: 0 },
@@ -35,33 +35,18 @@ export function SessionList() {
 	const { mask } = useDemo();
 	const { workspaceId } = useParams({ strict: false }) as { workspaceId: string };
 	const [page, setPage] = useState(1);
-	const [sortField, setSortField] = useState("created_at");
 	const [sortDir, setSortDir] = useState<SortDir>("desc");
 	const navigate = useNavigate();
-	const { data, isLoading, error } = useSessions(workspaceId, page);
+	const { data, isLoading, error } = useSessions(workspaceId, page, PAGE_SIZE, sortDir === "desc");
 
 	const sessions: Session[] = (data as { items?: Session[] } | undefined)?.items ?? [];
 	const totalPages = (data as { pages?: number } | undefined)?.pages ?? 1;
 	const total = (data as { total?: number } | undefined)?.total ?? 0;
 
-	const sorted = useMemo(() => {
-		return [...sessions].sort((a, b) => {
-			let cmp = 0;
-			if (sortField === "created_at") {
-				cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-			} else if (sortField === "active") {
-				// active sessions first (true > false)
-				cmp = Number(a.is_active) - Number(b.is_active);
-			} else if (sortField === "id") {
-				cmp = a.id.localeCompare(b.id);
-			}
-			return sortDir === "asc" ? cmp : -cmp;
-		});
-	}, [sessions, sortField, sortDir]);
-
-	function handleSort(field: string, dir: SortDir) {
-		setSortField(field);
+	// Ordering happens on the server (see useSessions), so the rows are shown as received.
+	function handleSort(_field: string, dir: SortDir) {
 		setSortDir(dir);
+		setPage(1);
 	}
 
 	return (
@@ -86,7 +71,7 @@ export function SessionList() {
 					<div className="ml-auto">
 						<SortControl
 							options={SORT_OPTIONS}
-							field={sortField}
+							field={SORT_FIELD}
 							dir={sortDir}
 							onChange={handleSort}
 						/>
@@ -108,10 +93,10 @@ export function SessionList() {
 				/>
 			)}
 
-			{!isLoading && sorted.length > 0 && (
+			{!isLoading && sessions.length > 0 && (
 				<>
 					<motion.div variants={container} initial="hidden" animate="show" className="space-y-2">
-						{sorted.map((session) => (
+						{sessions.map((session) => (
 							<motion.button
 								key={session.id}
 								variants={item}

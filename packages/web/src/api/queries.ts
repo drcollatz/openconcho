@@ -329,16 +329,18 @@ export function useChat(
 
 // ─── Sessions ─────────────────────────────────────────────────────────────────
 
-export function useSessions(workspaceId: string, page = 1, pageSize = 20) {
+// Honcho orders sessions by created_at ascending unless `reverse` is true. Paging
+// is server-side, so the direction must be requested here, not sorted per page.
+export function useSessions(workspaceId: string, page = 1, pageSize = 20, reverse = false) {
 	return useQuery({
-		queryKey: QK.sessions(workspaceId, page, pageSize),
+		queryKey: QK.sessions(workspaceId, page, pageSize, reverse),
 		queryFn: async () => {
 			const { data, error } = await client.current.POST(
 				"/v3/workspaces/{workspace_id}/sessions/list",
 				{
 					params: {
 						path: { workspace_id: workspaceId },
-						query: { page, size: pageSize },
+						query: { page, size: pageSize, reverse },
 					},
 					body: {},
 				},
